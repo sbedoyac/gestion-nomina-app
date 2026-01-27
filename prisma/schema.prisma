@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id        String   @id @default(uuid())
+  nombre    String
+  cedula    String   @unique
+  cargoBase String   // Referencia, puede cambiar por día
+  activo    Boolean  @default(true)
+  area      String   @default("Cerdo") // 'Cerdo', 'Res', 'Ambos'
+  createdAt DateTime @default(now())
+
+  dayAssignments DayAssignment[]
+  payments       Payment[]
+}
+
+model WorkDay {
+  id        String   @id @default(uuid())
+  fecha     DateTime @unique
+  createdAt DateTime @default(now())
+
+  assignments DayAssignment[]
+  production  ProductionDay?
+  payments    Payment[]
+}
+
+model DayAssignment {
+  id         String @id @default(uuid())
+  workDayId  String
+  employeeId        String
+  productType       String  @default("Cerdo") // 'Cerdo', 'Res'
+  cargoDia          String
+  cerdosParticipados Int?   @default(0) // Now generic "unitsParticipated" effectively
+  
+  workDay  WorkDay  @relation(fields: [workDayId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([workDayId, employeeId, productType])
+}
+
+model ProductionDay {
+  id                 String  @id @default(uuid())
+  workDayId          String
+  productType        String  @default("Cerdo") // 'Cerdo', 'Res'
+  cerdosDespostados  Int
+  valorDesposte      Int
+  valorRecogedor     Int
+  incluirCoordinador Boolean @default(false)
+  
+  workDay WorkDay @relation(fields: [workDayId], references: [id])
+  
+  @@unique([workDayId, productType])
+}
+
+model Payment {
+  id            String @id @default(uuid())
+  workDayId     String
+  employeeId    String
+  productType   String  @default("Cerdo")
+  cargoDia      String
+  pagoCalculado Int
+  detalle       String 
+
+  workDay  WorkDay  @relation(fields: [workDayId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([workDayId, employeeId, productType])
+}
