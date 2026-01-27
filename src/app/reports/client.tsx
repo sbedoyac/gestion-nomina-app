@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type ExtendedWorkDay = WorkDay & {
-    production: ProductionDay | null;
+    production: ProductionDay[];
     payments: Payment[];
 }
 
@@ -75,9 +75,9 @@ export function ReportsClient({ initialDays }: ReportsClientProps) {
                                 </TableHeader>
                                 <TableBody>
                                     {initialDays.map(day => {
-                                        const pigs = day.production?.cerdosDespostados || 0
-                                        const poolD = (day.production?.cerdosDespostados || 0) * (day.production?.valorDesposte || 0)
-                                        const poolR = (day.production?.cerdosDespostados || 0) * (day.production?.valorRecogedor || 0)
+                                        const pigs = day.production.reduce((acc, p) => acc + p.cerdosDespostados, 0)
+                                        const poolD = day.production.reduce((acc, p) => acc + (p.cerdosDespostados * p.valorDesposte), 0)
+                                        const poolR = day.production.reduce((acc, p) => acc + (p.cerdosDespostados * p.valorRecogedor), 0)
                                         const totalPaid = day.payments.reduce((acc, p) => acc + p.pagoCalculado, 0)
 
                                         return (

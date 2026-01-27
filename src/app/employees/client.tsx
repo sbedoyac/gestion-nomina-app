@@ -36,9 +36,10 @@ import { useRouter } from 'next/navigation'
 
 interface EmployeesClientProps {
     initialEmployees: Employee[]
+    currentUser: any
 }
 
-export function EmployeesClient({ initialEmployees }: EmployeesClientProps) {
+export function EmployeesClient({ initialEmployees, currentUser }: EmployeesClientProps) {
     // We use router.refresh() to update data from server, 
     // but we can also maintain local state for immediate feedback if we wanted.
     // For MVP, router.refresh + simple state is fine. 
@@ -53,7 +54,7 @@ export function EmployeesClient({ initialEmployees }: EmployeesClientProps) {
         nombre: '',
         cedula: '',
         cargoBase: 'Despostador',
-        area: 'Cerdo'
+        area: currentUser?.area && currentUser?.area !== 'Ambos' ? currentUser.area : 'Cerdo'
     })
 
     const resetForm = () => {
@@ -171,6 +172,7 @@ export function EmployeesClient({ initialEmployees }: EmployeesClientProps) {
                                 <Select
                                     value={formData.area}
                                     onValueChange={(val) => setFormData({ ...formData, area: val })}
+                                    disabled={currentUser?.role === 'COORDINADOR' && currentUser?.area !== 'Ambos'}
                                 >
                                     <SelectTrigger className="col-span-3">
                                         <SelectValue placeholder="Seleccione área" />

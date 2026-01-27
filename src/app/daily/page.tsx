@@ -1,11 +1,14 @@
-import { prisma } from '@/lib/prisma'
+
+import { getSession } from '@/lib/auth'
+import { getEmployees } from '@/app/actions'
 import { DailyOperationsClient } from './client'
 
 export default async function DailyPage() {
-    const activeEmployees = await prisma.employee.findMany({
-        where: { activo: true },
-        orderBy: { nombre: 'asc' }
-    })
+    const session = await getSession()
+    const user = session?.user
+
+    const employees = await getEmployees()
+    const activeEmployees = employees.filter(e => e.activo)
 
     return (
         <div className="space-y-6">
@@ -15,7 +18,7 @@ export default async function DailyPage() {
                     Registro de asistencia, producción y cálculo de nómina diaria.
                 </p>
             </div>
-            <DailyOperationsClient activeEmployees={activeEmployees} />
+            <DailyOperationsClient activeEmployees={activeEmployees} currentUser={user} />
         </div>
     )
 }

@@ -1,7 +1,11 @@
 import { getEmployees } from "@/app/actions"
 import { EmployeesClient } from "./client"
 
+import { getSession } from '@/lib/auth'
+
 export default async function EmployeesPage() {
+    const session = await getSession()
+    const user = session?.user
     const employees = await getEmployees()
     return (
         <div className="space-y-6">
@@ -11,7 +15,7 @@ export default async function EmployeesPage() {
                     Gestione el personal disponible para la operación.
                 </p>
             </div>
-            <EmployeesClient initialEmployees={employees} />
+            <EmployeesClient initialEmployees={employees} currentUser={user} />
         </div>
     )
 }

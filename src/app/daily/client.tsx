@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Employee, WorkDay, DayAssignment, ProductionDay, Payment } from '@prisma/client'
-import { getWorkDayByDate, saveAssignments, saveProduction, calculatePaymentsAction } from '@/app/actions'
+import { getWorkDayByDate, saveAssignments, saveProduction, calculatePaymentsAction, ensureWorkDay } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils'
 
 interface DailyOperationsClientProps {
     activeEmployees: Employee[]
+    currentUser: any
 }
 
 type ExtendedWorkDay = WorkDay & {
@@ -29,8 +30,8 @@ type ExtendedWorkDay = WorkDay & {
     payments: Payment[];
 }
 
-export function DailyOperationsClient({ activeEmployees }: DailyOperationsClientProps) {
-    const [date, setDate] = useState<Date>(new Date())
+export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOperationsClientProps) {
+    const [date, setDate] = useState<Date>()
     const [loading, setLoading] = useState(false)
     const [calculating, setCalculating] = useState(false)
 
@@ -50,8 +51,15 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
     // Map employeeId -> { present: boolean, role: string; participated?: number }
     const [attendance, setAttendance] = useState<Record<string, { present: boolean; role: string; participated?: number }>>({})
 
+    // Set date on mount to avoid hydration mismatch
+    useEffect(() => {
+        setDate(new Date())
+    }, [])
+
     // Fetch data when date changes
     useEffect(() => {
+        if (!date) return
+
         const loadDay = async () => {
             setLoading(true)
             try {
@@ -103,7 +111,8 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
                         pigs: 0,
                         deboneVal: 2000,
                         pickerVal: 180,
-                        includeCoord: false
+                        includeCoord: false,
+                        productType: currentUser?.area === 'Res' ? 'Res' : 'Cerdo'
                     })
                 }
 
@@ -115,7 +124,7 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
         }
 
         loadDay()
-    }, [date, activeEmployees])
+    }, [date]) // Excluding activeEmployees to avoid loop if prop reference changes
 
     const handleAttendanceChange = (empId: string, present: boolean) => {
         setAttendance(prev => ({
@@ -164,20 +173,20 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
             // I need a `ensureWorkDay` action.
             // I implemented `ensureWorkDay` in actions.ts!
 
-            const { ensureWorkDay } = await import('@/app/actions') // Dynamic import or just import at top? 
-            // I imported at top but didn't put it in the `import` statement list.
-            // I need to add it to imports.
-
-            // FIX imports
+            if (!date) {
+                alert("Seleccione una fecha")
+                setCalculating(false)
+                return
+            }
 
             const day = await ensureWorkDay(date)
 
             // 2. Save Production
             await saveProduction(day.id, {
-                pigs: Number(prodForm.pigs), // ensure number
-                deboneVal: Number(prodForm.deboneVal),
-                pickerVal: Number(prodForm.pickerVal),
-                includeCoord: prodForm.includeCoord,
+                pigs: Number(prodForm.pigs) || 0,
+                deboneVal: Number(prodForm.deboneVal) || 0,
+                pickerVal: Number(prodForm.pickerVal) || 0,
+                includeCoord: prodForm.includeCoord ?? false,
                 productType: prodForm.productType
             })
 
@@ -190,7 +199,7 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
                     participated: val.participated ?? prodForm.pigs // Default to max if not set
                 }))
 
-            await saveAssignments(day.id, assignments)
+            await saveAssignments(day.id, assignments, prodForm.productType)
 
             // 4. Calculate
             const res = await calculatePaymentsAction(day.id)
@@ -268,8 +277,8 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
                             <Label className="mb-2 block">Tipo de Operación</Label>
                             <Tabs value={prodForm.productType} onValueChange={handleProductTypeChange}>
                                 <TabsList className="grid w-full grid-cols-2">
-                                    <TabsTrigger value="Cerdo">Cerdo (Pork)</TabsTrigger>
-                                    <TabsTrigger value="Res">Res (Beef)</TabsTrigger>
+                                    <TabsTrigger value="Cerdo" disabled={currentUser?.role === 'COORDINADOR' && currentUser?.area === 'Res'}>Cerdo (Pork)</TabsTrigger>
+                                    <TabsTrigger value="Res" disabled={currentUser?.role === 'COORDINADOR' && currentUser?.area === 'Cerdo'}>Res (Beef)</TabsTrigger>
                                 </TabsList>
                             </Tabs>
                         </div>
@@ -279,7 +288,7 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
                                 <Label>Cantidad ({prodForm.productType})</Label>
                                 <Input
                                     type="number"
-                                    value={prodForm.pigs}
+                                    value={prodForm.pigs ?? ''}
                                     onChange={e => setProdForm({ ...prodForm, pigs: Number(e.target.value) })}
                                 />
                             </div>
@@ -287,7 +296,7 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
                                 <Label>Valor x {prodForm.productType} (Desposte)</Label>
                                 <Input
                                     type="number"
-                                    value={prodForm.deboneVal}
+                                    value={prodForm.deboneVal ?? ''}
                                     onChange={e => setProdForm({ ...prodForm, deboneVal: Number(e.target.value) })}
                                 />
                             </div>
@@ -295,7 +304,7 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
                                 <Label>Valor x {prodForm.productType} (Recogedor)</Label>
                                 <Input
                                     type="number"
-                                    value={prodForm.pickerVal}
+                                    value={prodForm.pickerVal ?? ''}
                                     onChange={e => setProdForm({ ...prodForm, pickerVal: Number(e.target.value) })}
                                 />
                             </div>
@@ -359,7 +368,7 @@ export function DailyOperationsClient({ activeEmployees }: DailyOperationsClient
                                             <Input
                                                 type="number"
                                                 disabled={!emp.present || emp.role === 'Recogedor'}
-                                                value={emp.participated ?? prodForm.pigs}
+                                                value={emp.participated ?? prodForm.pigs ?? ''}
                                                 onChange={(e) => handleParticipatedChange(emp.id, Number(e.target.value))}
                                                 className="w-20"
                                             />

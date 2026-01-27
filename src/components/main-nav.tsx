@@ -3,11 +3,13 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { logoutAction } from '@/app/actions'
 
 export function MainNav({
     className,
+    currentUser,
     ...props
-}: React.HTMLAttributes<HTMLElement>) {
+}: React.HTMLAttributes<HTMLElement> & { currentUser?: any }) {
     const pathname = usePathname()
 
     const routes = [
@@ -50,6 +52,35 @@ export function MainNav({
                     {route.label}
                 </Link>
             ))}
+            {currentUser?.role === 'ADMIN' && (
+                <Link
+                    href="/admin"
+                    className={cn(
+                        "text-sm font-medium transition-colors hover:text-primary",
+                        pathname === '/admin'
+                            ? "text-black dark:text-white"
+                            : "text-muted-foreground"
+                    )}
+                >
+                    Administración
+                </Link>
+            )}
+
+            <div className="ml-auto flex items-center space-x-4">
+                {currentUser && (
+                    <span className="text-sm text-muted-foreground">
+                        Hola, {currentUser.username}
+                    </span>
+                )}
+                {currentUser && (
+                    <button
+                        onClick={() => logoutAction()}
+                        className="text-sm font-medium text-red-500 hover:text-red-700"
+                    >
+                        Cerrar Sesión
+                    </button>
+                )}
+            </div>
         </nav>
     )
 }

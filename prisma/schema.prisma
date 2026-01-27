@@ -17,7 +17,17 @@ model Employee {
   createdAt DateTime @default(now())
 
   dayAssignments DayAssignment[]
+
   payments       Payment[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  role      String   // 'ADMIN', 'COORDINADOR', 'GESTION_HUMANA'
+  area      String?  // 'Cerdo', 'Res', 'Ambos'
+  createdAt DateTime @default(now())
 }
 
 model WorkDay {
@@ -26,7 +36,7 @@ model WorkDay {
   createdAt DateTime @default(now())
 
   assignments DayAssignment[]
-  production  ProductionDay?
+  production  ProductionDay[]
   payments    Payment[]
 }
 

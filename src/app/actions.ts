@@ -3,11 +3,64 @@
 import { prisma } from '@/lib/prisma'
 import { calculatePayroll, Role } from '@/lib/payroll-engine'
 import { revalidatePath } from 'next/cache'
+import { verifyPassword, login, logout, getSession, hashPassword } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+
+
+// --- Authentication ---
+
+export async function loginAction(formData: FormData) {
+    const username = formData.get('username') as string
+    const password = formData.get('password') as string
+
+    if (!username || !password) {
+        return { success: false, error: 'Credenciales incompletas' }
+    }
+
+    const user = await prisma.user.findUnique({
+        where: { username }
+    })
+
+    if (!user) {
+        return { success: false, error: 'Usuario no encontrado' }
+    }
+
+    const valid = await verifyPassword(password, user.password)
+    if (!valid) {
+        return { success: false, error: 'Contraseña incorrecta' }
+    }
+
+    // Login successful
+    const { password: _, ...userWithoutPassword } = user
+    await login(userWithoutPassword)
+    redirect('/daily')
+}
+
+export async function logoutAction() {
+    await logout()
+    redirect('/login')
+}
+
+export async function getCurrentSession() {
+    return await getSession()
+}
 
 // --- Employees ---
 
 export async function getEmployees() {
+    const session = await getSession()
+    if (!session) return [] // Or throw error
+
+    const user = session.user
+    const where: any = {}
+
+    if (user.role === 'COORDINADOR' && user.area && user.area !== 'Ambos') {
+        where.area = { in: [user.area, 'Ambos'] }
+    }
+    // Admin and Gestion Humana see all, Coordinator Ambos sees all
+
     return await prisma.employee.findMany({
+        where,
         orderBy: { nombre: 'asc' },
     })
 }
@@ -70,8 +123,8 @@ export async function getWorkDayByDate(date: Date) {
     const start = new Date(date)
     start.setHours(0, 0, 0, 0)
 
-    // But wait, validation says "fecha unique".
-    // I will attempt to find unique.
+    const session = await getSession()
+    const user = session?.user
 
     const day = await prisma.workDay.findUnique({
         where: { fecha: start },
@@ -81,6 +134,26 @@ export async function getWorkDayByDate(date: Date) {
             payments: true
         }
     })
+
+    if (!day) return null
+
+    // RBAC Filtering for Daily View
+    if (user && user.role === 'COORDINADOR' && user.area && user.area !== 'Ambos') {
+        const area = user.area
+
+        // Filter Production: Only show production for this area
+        day.production = day.production.filter(p => p.productType === area)
+
+        // Filter Assignments: Only show assignments for employees in this area (or assigned to this area's production?)
+        // Actually, assignments have 'productType' (implied by role? No, productType added to DayAssignment?)
+        // Schema: DayAssignment has productType default 'Cerdo'.
+        // So filter by productType.
+        day.assignments = day.assignments.filter(a => a.productType === area)
+
+        // Filter Payments: Also by productType
+        day.payments = day.payments.filter(p => p.productType === area)
+    }
+
     return day;
 }
 
@@ -100,13 +173,11 @@ export async function ensureWorkDay(date: Date) {
     return day
 }
 
-export async function saveAssignments(workDayId: string, assignments: { employeeId: string; role: string; participated?: number }[]) {
-    // Transaction: Delete existing for this day (or upsert), then create new
-    // assignments unique(day, employee)
+export async function saveAssignments(workDayId: string, assignments: { employeeId: string; role: string; participated?: number }[], productType: string) {
+    // Transaction: Delete existing for this day AND productType, then create new
 
-    // Easier: Delete all for this day, recreate.
     await prisma.dayAssignment.deleteMany({
-        where: { workDayId },
+        where: { workDayId, productType },
     })
 
     await prisma.dayAssignment.createMany({
@@ -114,6 +185,7 @@ export async function saveAssignments(workDayId: string, assignments: { employee
             workDayId,
             employeeId: a.employeeId,
             cargoDia: a.role,
+            productType,
             cerdosParticipados: a.participated
         })),
     })
@@ -123,17 +195,29 @@ export async function saveAssignments(workDayId: string, assignments: { employee
 }
 
 export async function saveProduction(workDayId: string, data: { pigs: number; deboneVal: number; pickerVal: number; includeCoord: boolean; productType: string }) {
-    const existing = await prisma.productionDay.findUnique({ where: { workDayId } })
+    const existing = await prisma.productionDay.findUnique({
+        where: {
+            workDayId_productType: {
+                workDayId,
+                productType: data.productType
+            }
+        }
+    })
 
     if (existing) {
         await prisma.productionDay.update({
-            where: { workDayId },
+            where: {
+                workDayId_productType: {
+                    workDayId,
+                    productType: data.productType
+                }
+            },
             data: {
                 cerdosDespostados: data.pigs,
                 valorDesposte: data.deboneVal,
                 valorRecogedor: data.pickerVal,
                 incluirCoordinador: data.includeCoord,
-                productType: data.productType,
+                // productType is part of key, not updated usually, but in data it is same.
             },
         })
     } else {
@@ -152,7 +236,11 @@ export async function saveProduction(workDayId: string, data: { pigs: number; de
     return { success: true }
 }
 
+
 export async function calculatePaymentsAction(workDayId: string) {
+    const session = await getSession()
+    const user = session?.user
+
     const day = await prisma.workDay.findUnique({
         where: { id: workDayId },
         include: {
@@ -161,40 +249,106 @@ export async function calculatePaymentsAction(workDayId: string) {
         }
     })
 
-    if (!day || !day.production || day.assignments.length === 0) {
-        return { success: false, error: 'Missing data' }
+    if (!day || day.production.length === 0 || day.assignments.length === 0) {
+        return { success: false, error: 'Datos incompletos o inexistentes' }
     }
 
-    const results = calculatePayroll({
-        pigsProcessed: day.production.cerdosDespostados, // Generic quantity
-        deboneValuePerPig: day.production.valorDesposte,
-        pickerValuePerPig: day.production.valorRecogedor,
-        includeCoordinator: day.production.incluirCoordinador,
-        assignments: day.assignments.map(a => ({
-            employeeId: a.employeeId,
-            role: a.cargoDia as Role,
-            pigsParticipated: a.cerdosParticipados
-        }))
-    })
+    let results: any[] = []
 
-    // Save payments
-    // Transaction: clear old payments for this day, insert new
-    await prisma.payment.deleteMany({
-        where: { workDayId },
-    })
+    // Determine target areas (RBAC)
+    let targetAreas = ['Cerdo', 'Res']
+    if (user && user.role === 'COORDINADOR' && user.area && user.area !== 'Ambos') {
+        targetAreas = [user.area]
+    }
 
-    await prisma.payment.createMany({
-        data: results.map(r => ({
-            workDayId,
-            employeeId: r.employeeId,
-            cargoDia: r.role,
-            pagoCalculado: r.amount,
-            detalle: JSON.stringify(r.details)
-        }))
-    })
+    for (const prod of day.production) {
+        if (!targetAreas.includes(prod.productType)) continue;
+
+        const assignments = day.assignments.filter(a => a.productType === prod.productType)
+
+        if (assignments.length === 0 && prod.cerdosDespostados > 0) {
+            // If production exists but no assignments? Maybe user forgot to assign.
+            // But we should continue.
+            continue
+        }
+
+        const payroll = calculatePayroll({
+            pigsProcessed: prod.cerdosDespostados,
+            deboneValuePerPig: prod.valorDesposte,
+            pickerValuePerPig: prod.valorRecogedor,
+            includeCoordinator: prod.incluirCoordinador,
+            assignments: assignments.map(a => ({
+                employeeId: a.employeeId,
+                role: a.cargoDia as Role,
+                pigsParticipated: a.cerdosParticipados
+            }))
+        })
+
+        // Save payments for this productType
+        await prisma.payment.deleteMany({
+            where: { workDayId, productType: prod.productType },
+        })
+
+        await prisma.payment.createMany({
+            data: payroll.map(r => ({
+                workDayId,
+                employeeId: r.employeeId,
+                cargoDia: r.role,
+                productType: prod.productType,
+                pagoCalculado: r.amount,
+                detalle: JSON.stringify(r.details)
+            }))
+        })
+
+        results = [...results, ...payroll]
+    }
 
     revalidatePath('/daily')
     return { success: true, results }
+}
+
+// --- Admin ---
+
+export async function getUsers() {
+    return await prisma.user.findMany({
+        orderBy: { username: 'asc' },
+        select: { id: true, username: true, role: true, area: true, createdAt: true } // Exclude password
+    })
+}
+
+export async function createUser(data: any) {
+    const password = await hashPassword(data.password, 12)
+    try {
+        await prisma.user.create({
+            data: {
+                username: data.username,
+                password,
+                role: data.role,
+                area: data.area
+            }
+        })
+        revalidatePath('/admin')
+        return { success: true }
+    } catch (e: any) {
+        if (e.code === 'P2002') return { success: false, error: 'Usuario ya existe' }
+        return { success: false, error: 'Error al crear usuario' }
+    }
+}
+
+export async function updateUserPassword(id: string, newPassword: string) {
+    const password = await hashPassword(newPassword, 12)
+    await prisma.user.update({
+        where: { id },
+        data: { password }
+    })
+    revalidatePath('/admin')
+    return { success: true }
+}
+
+export async function deleteUser(id: string) {
+    await prisma.user.delete({ where: { id } })
+    revalidatePath('/admin')
+    return { success: true }
 }
 
 // --- Reports ---
