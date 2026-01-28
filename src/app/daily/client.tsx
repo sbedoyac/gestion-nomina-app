@@ -26,7 +26,7 @@ interface DailyOperationsClientProps {
 
 type ExtendedWorkDay = WorkDay & {
     assignments: DayAssignment[];
-    production: ProductionDay | null;
+    production: ProductionDay[];
     payments: Payment[];
 }
 
@@ -92,14 +92,17 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
 
                 setAttendance(initialAttendance)
 
-                if (day?.production) {
-                    setProdForm({
-                        pigs: day.production.cerdosDespostados,
-                        deboneVal: day.production.valorDesposte,
-                        pickerVal: day.production.valorRecogedor,
-                        includeCoord: day.production.incluirCoordinador,
-                        productType: (day.production as any).productType || 'Cerdo'
-                    })
+                const prod = day?.production.find(p => p.productType === prodForm.productType)
+
+                if (prod) {
+                    setProdForm(prev => ({
+                        ...prev,
+                        pigs: prod.cerdosDespostados,
+                        deboneVal: prod.valorDesposte,
+                        pickerVal: prod.valorRecogedor,
+                        includeCoord: prod.incluirCoordinador,
+                        productType: prod.productType
+                    }))
                 } else {
                     // Keep defaults or reset?
                     // If new day, keep defaults (2000, 180, false).
@@ -149,13 +152,26 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
 
     const handleProductTypeChange = (type: string) => {
         const isBeef = type === 'Res'
-        setProdForm(prev => ({
-            ...prev,
-            productType: type,
-            deboneVal: isBeef ? 11000 : 2000,
-            pickerVal: isBeef ? 1000 : 180, // Assumption for Beef picker
-            pigs: 0 // Reset qty
-        }))
+        const existing = workDay?.production.find(p => p.productType === type)
+
+        if (existing) {
+            setProdForm(prev => ({
+                ...prev,
+                productType: type,
+                pigs: existing.cerdosDespostados,
+                deboneVal: existing.valorDesposte,
+                pickerVal: existing.valorRecogedor,
+                includeCoord: existing.incluirCoordinador
+            }))
+        } else {
+            setProdForm(prev => ({
+                ...prev,
+                productType: type,
+                deboneVal: isBeef ? 11000 : 2000,
+                pickerVal: isBeef ? 1000 : 180, // Assumption for Beef picker
+                pigs: 0 // Reset qty
+            }))
+        }
     }
 
     const handleSaveAndCalculate = async () => {

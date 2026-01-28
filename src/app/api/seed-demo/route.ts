@@ -67,7 +67,12 @@ export async function GET() {
         }
 
         await prisma.productionDay.upsert({
-            where: { workDayId: workDay.id },
+            where: {
+                workDayId_productType: {
+                    workDayId: workDay.id,
+                    productType: 'Cerdo'
+                }
+            },
             update: {
                 cerdosDespostados: prodData.cerdos,
                 valorDesposte: prodData.valDe,
