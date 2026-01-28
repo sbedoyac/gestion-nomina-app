@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/app/actions'
@@ -35,7 +36,8 @@ export function MainNav({
             className={cn("flex items-center space-x-4 lg:space-x-6", className)}
             {...props}
         >
-            <Link href="/" className="text-xl font-bold tracking-tight text-primary mr-4">
+            <Link href="/" className="flex items-center text-xl font-bold tracking-tight text-primary mr-4">
+                <Image src="/logo.jpg" alt="Logo" width={50} height={34} className="mr-2" />
                 Nómina Desposte
             </Link>
             {routes.map((route) => (
