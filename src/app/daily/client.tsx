@@ -110,12 +110,14 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
                     // Should valid defaults be persistent? 
                     // I'll stick to hardcoded defaults for now or previous val?
                     // Hardcoded defaults are safer for MVP.
+                    const initialType = currentUser?.area === 'Res' ? 'Res' : 'Cerdo'
+                    const isBeef = initialType === 'Res'
                     setProdForm({
                         pigs: 0,
-                        deboneVal: 2000,
-                        pickerVal: 180,
+                        deboneVal: isBeef ? 11000 : 2000,
+                        pickerVal: isBeef ? 1000 : 180,
                         includeCoord: false,
-                        productType: currentUser?.area === 'Res' ? 'Res' : 'Cerdo'
+                        productType: initialType
                     })
                 }
 
