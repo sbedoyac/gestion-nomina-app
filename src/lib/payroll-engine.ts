@@ -28,52 +28,39 @@ export interface PaymentResult {
 export function calculatePayroll(input: CalculationInput): PaymentResult[] {
     const { pigsProcessed, deboneValuePerPig, pickerValuePerPig, includeCoordinator, assignments } = input;
 
-    // 1. Separate Pickers (Recogedores)
-    // Assumption: Recogedores are paid based on TOTAL pigs, divided by pool.
+    // 1. Separate Groups
     const pickers = assignments.filter(a => a.role === 'Recogedor');
     const deboningTeam = assignments.filter(a => a.role !== 'Recogedor');
 
-    // Recogedores Logic
-    const pickerPool = pigsProcessed * pickerValuePerPig;
-    const pickerPayment = pickers.length > 0 ? Math.floor(pickerPool / pickers.length) : 0;
+    // 2. Calculate Pay for Each Group
+    const deboningResults = calculateSegmentedPay(deboningTeam, pigsProcessed, deboneValuePerPig, includeCoordinator, 'debone');
+    const pickerResults = calculateSegmentedPay(pickers, pigsProcessed, pickerValuePerPig, false, 'picker');
 
-    const results: PaymentResult[] = [];
+    return [...deboningResults, ...pickerResults];
+}
 
-    pickers.forEach(p => {
-        results.push({
-            employeeId: p.employeeId,
-            role: p.role,
-            amount: pickerPayment,
-            details: {
-                baseRate: 0,
-                units: 0,
-                debonePool: 0,
-                pickerPool,
-                formula: `(${pigsProcessed} * ${pickerValuePerPig}) / ${pickers.length}`
-            }
-        });
-    });
-
-    // 2. Deboning Team - Segmented Calculation
+function calculateSegmentedPay(
+    team: CalculationInput['assignments'],
+    totalUnits: number,
+    valuePerUnit: number,
+    includeCoordinator: boolean,
+    poolType: 'debone' | 'picker'
+): PaymentResult[] {
 
     // Normalize participation
-    const teamWithParticipation = deboningTeam.map(m => ({
+    const teamWithParticipation = team.map(m => ({
         ...m,
         participation: (m.pigsParticipated && m.pigsParticipated > 0)
-            ? Math.min(m.pigsParticipated, pigsProcessed)
-            : pigsProcessed
+            ? Math.min(m.pigsParticipated, totalUnits)
+            : totalUnits
     }));
 
-    // Identify Cut Points [0, ..., pigsProcessed]
+    // Identify Cut Points [0, ..., totalUnits]
     const unsortedPoints = new Set([0]);
     teamWithParticipation.forEach(m => unsortedPoints.add(m.participation));
-    // Ensure we include total if any gap exists? No, the segments are defined by participations.
-    // Actually, if everyone stops at 200 but total is 420, the period 200-420 exists but has 0 units?
-    // Yes. If max participation < pigsProcessed, that segment exists but pool remains undistributed?
-    // Or implies no one worked that segment.
 
-    if (Math.max(...Array.from(unsortedPoints)) < pigsProcessed) {
-        unsortedPoints.add(pigsProcessed);
+    if (Math.max(...Array.from(unsortedPoints)) < totalUnits) {
+        unsortedPoints.add(totalUnits);
     }
 
     const cutPoints = Array.from(unsortedPoints).sort((a, b) => a - b);
@@ -103,19 +90,27 @@ export function calculatePayroll(input: CalculationInput): PaymentResult[] {
         // Who is active in this segment? (Participation >= seg.end)
         const activeMembers = teamWithParticipation.filter(m => m.participation >= seg.end);
 
-        // Calculate Units (excluding Coordinator)
+        if (activeMembers.length === 0) return;
+
+        // Calculate Units
         let segmentUnits = 0;
         activeMembers.forEach(m => {
-            switch (m.role) {
-                case 'Despostador': segmentUnits += 1.0; break;
-                case 'Polivalente': segmentUnits += 0.5; break;
-                case 'Aprendiz': segmentUnits += 0.25; break;
-                case 'Coordinador': break; // Excluded from divisor (Bonus mode)
+            if (poolType === 'picker') {
+                // Pickers are all 1.0 share relative to each other
+                segmentUnits += 1.0;
+            } else {
+                switch (m.role) {
+                    case 'Despostador': segmentUnits += 1.0; break;
+                    case 'Polivalente': segmentUnits += 0.5; break;
+                    case 'Aprendiz': segmentUnits += 0.25; break;
+                    // Coordinator excluded from DIVISOR in Bonus Mode
+                    case 'Coordinador': break;
+                }
             }
         });
 
         // Segment Pool
-        const segmentPool = seg.size * deboneValuePerPig;
+        const segmentPool = seg.size * valuePerUnit;
 
         // Segment Base Rate
         const segmentBaseRate = segmentUnits > 0 ? segmentPool / segmentUnits : 0;
@@ -123,11 +118,16 @@ export function calculatePayroll(input: CalculationInput): PaymentResult[] {
         // Distribute
         activeMembers.forEach(m => {
             let factor = 0;
-            switch (m.role) {
-                case 'Despostador': factor = 1.0; break;
-                case 'Polivalente': factor = 0.5; break;
-                case 'Aprendiz': factor = 0.25; break;
-                case 'Coordinador': factor = includeCoordinator ? 1.0 : 0; break;
+            if (poolType === 'picker') {
+                factor = 1.0;
+            } else {
+                switch (m.role) {
+                    case 'Despostador': factor = 1.0; break;
+                    case 'Polivalente': factor = 0.5; break;
+                    case 'Aprendiz': factor = 0.25; break;
+                    // Coordinator included in PAYMENT in Bonus Mode
+                    case 'Coordinador': factor = includeCoordinator ? 1.0 : 0; break;
+                }
             }
 
             if (factor > 0) {
@@ -135,7 +135,7 @@ export function calculatePayroll(input: CalculationInput): PaymentResult[] {
                 const current = payMap.get(m.employeeId)!;
                 current.total += pay;
 
-                if (pay > 0 && activeMembers.length < 15) { // Only log concise formulas
+                if (pay > 0 && activeMembers.length < 15) {
                     current.formulas.push(`[${seg.start}-${seg.end}]: ${Math.floor(pay)}`);
                 }
             }
@@ -143,29 +143,31 @@ export function calculatePayroll(input: CalculationInput): PaymentResult[] {
     });
 
     // Final Results
-    teamWithParticipation.forEach(m => {
+    return teamWithParticipation.map(m => {
         const data = payMap.get(m.employeeId)!;
         let factor = 0;
-        switch (m.role) {
-            case 'Despostador': factor = 1.0; break;
-            case 'Polivalente': factor = 0.5; break;
-            case 'Aprendiz': factor = 0.25; break;
-            case 'Coordinador': factor = 1.0; break;
+        if (poolType === 'picker') {
+            factor = 1.0;
+        } else {
+            switch (m.role) {
+                case 'Despostador': factor = 1.0; break;
+                case 'Polivalente': factor = 0.5; break;
+                case 'Aprendiz': factor = 0.25; break;
+                case 'Coordinador': factor = 1.0; break;
+            }
         }
 
-        results.push({
+        return {
             employeeId: m.employeeId,
             role: m.role,
             amount: Math.floor(data.total),
             details: {
                 baseRate: 0,
                 units: factor,
-                debonePool: m.participation * deboneValuePerPig,
-                pickerPool: 0,
+                debonePool: poolType === 'debone' ? m.participation * valuePerUnit : 0,
+                pickerPool: poolType === 'picker' ? m.participation * valuePerUnit : 0,
                 formula: data.formulas.length > 0 ? data.formulas.join(' + ') : 'No participation'
             }
-        });
+        };
     });
-
-    return results;
 }

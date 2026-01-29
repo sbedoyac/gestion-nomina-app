@@ -426,7 +426,7 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
                                         <TableCell>
                                             <Input
                                                 type="number"
-                                                disabled={!emp.present || emp.role === 'Recogedor'}
+                                                disabled={!emp.present}
                                                 value={emp.participated ?? prodForm.pigs ?? ''}
                                                 onChange={(e) => handleParticipatedChange(emp.id, Number(e.target.value))}
                                                 className="w-20"
