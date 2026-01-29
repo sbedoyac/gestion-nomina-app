@@ -53,12 +53,12 @@ export function EmployeesClient({ initialEmployees, currentUser }: EmployeesClie
     const [formData, setFormData] = useState({
         nombre: '',
         cedula: '',
-        cargoBase: 'Despostador',
+        cargoBase: 'Despostador Experto',
         area: currentUser?.area && currentUser?.area !== 'Ambos' ? currentUser.area : 'Cerdo'
     })
 
     const resetForm = () => {
-        setFormData({ nombre: '', cedula: '', cargoBase: 'Despostador', area: 'Cerdo' })
+        setFormData({ nombre: '', cedula: '', cargoBase: 'Despostador Experto', area: 'Cerdo' })
         setEditingEmployee(null)
     }
 
@@ -158,10 +158,12 @@ export function EmployeesClient({ initialEmployees, currentUser }: EmployeesClie
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Coordinador">Coordinador</SelectItem>
-                                        <SelectItem value="Despostador">Despostador</SelectItem>
-                                        <SelectItem value="Polivalente">Polivalente</SelectItem>
-                                        <SelectItem value="Aprendiz">Aprendiz</SelectItem>
-                                        <SelectItem value="Recogedor">Recogedor</SelectItem>
+                                        <SelectItem value="Despostador Experto">Despostador Experto</SelectItem>
+                                        <SelectItem value="Despostador General">Despostador General</SelectItem>
+                                        <SelectItem value="Despostador Aprendiz">Despostador Aprendiz</SelectItem>
+                                        <SelectItem value="Recogedor Experto">Recogedor Experto</SelectItem>
+                                        <SelectItem value="Recogedor General">Recogedor General</SelectItem>
+                                        <SelectItem value="Recogedor Aprendiz">Recogedor Aprendiz</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

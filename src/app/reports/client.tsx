@@ -194,10 +194,12 @@ export function ReportsClient({ initialDays }: ReportsClientProps) {
                                                 <SelectContent>
                                                     <SelectItem value="Todos">Todos</SelectItem>
                                                     <SelectItem value="Coordinador">Coordinador</SelectItem>
-                                                    <SelectItem value="Despostador">Despostador</SelectItem>
-                                                    <SelectItem value="Polivalente">Polivalente</SelectItem>
-                                                    <SelectItem value="Aprendiz">Aprendiz</SelectItem>
-                                                    <SelectItem value="Recogedor">Recogedor</SelectItem>
+                                                    <SelectItem value="Despostador Experto">Despostador Experto</SelectItem>
+                                                    <SelectItem value="Despostador General">Despostador General</SelectItem>
+                                                    <SelectItem value="Despostador Aprendiz">Despostador Aprendiz</SelectItem>
+                                                    <SelectItem value="Recogedor Experto">Recogedor Experto</SelectItem>
+                                                    <SelectItem value="Recogedor General">Recogedor General</SelectItem>
+                                                    <SelectItem value="Recogedor Aprendiz">Recogedor Aprendiz</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
