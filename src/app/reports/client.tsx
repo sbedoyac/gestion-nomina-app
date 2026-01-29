@@ -14,19 +14,10 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 import { useState } from 'react'
-import { getConsolidatedPayroll } from '@/app/actions'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import * as XLSX from 'xlsx'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
-type ExtendedWorkDay = WorkDay & {
-    production: ProductionDay[];
-    payments: Payment[];
-}
-
-interface ReportsClientProps {
-    initialDays: ExtendedWorkDay[]
-}
+// ... existing imports
 
 export function ReportsClient({ initialDays }: ReportsClientProps) {
     // Consolidated State
@@ -34,6 +25,34 @@ export function ReportsClient({ initialDays }: ReportsClientProps) {
     const [endDate, setEndDate] = useState('')
     const [consolidatedData, setConsolidatedData] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
+    const [areaFilter, setAreaFilter] = useState('Todas')
+    const [roleFilter, setRoleFilter] = useState('Todos')
+
+    const filteredData = consolidatedData.filter(item => {
+        const matchesArea = areaFilter === 'Todas' ||
+            item.employee.area === areaFilter ||
+            item.employee.area === 'Ambos'
+
+        const matchesRole = roleFilter === 'Todos' ||
+            item.employee.cargoBase === roleFilter
+
+        return matchesArea && matchesRole
+    })
+
+    const handleExport = () => {
+        const exportData = filteredData.map(item => ({
+            Nombre: item.employee.nombre,
+            Cedula: item.employee.cedula,
+            Cargo: item.employee.cargoBase,
+            Area: item.employee.area,
+            TotalPagar: item.total
+        }))
+
+        const ws = XLSX.utils.json_to_sheet(exportData)
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, "Nomina")
+        XLSX.writeFile(wb, `Nomina_${startDate}_${endDate}.xlsx`)
+    }
 
     const handleGenerate = async () => {
         if (!startDate || !endDate) return
@@ -140,31 +159,71 @@ export function ReportsClient({ initialDays }: ReportsClientProps) {
                             </div>
 
                             {consolidatedData.length > 0 && (
-                                <div className="border rounded-md overflow-hidden">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Cargo (Base)</TableHead>
-                                                <TableHead>Nombre</TableHead>
-                                                <TableHead>Cédula</TableHead>
-                                                <TableHead className="text-right">Total a Pagar</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {consolidatedData.map((item, idx) => (
-                                                <TableRow key={idx}>
-                                                    <TableCell className="font-medium text-muted-foreground">
-                                                        {item.employee.cargoBase}
-                                                    </TableCell>
-                                                    <TableCell>{item.employee.nombre}</TableCell>
-                                                    <TableCell>{item.employee.cedula}</TableCell>
-                                                    <TableCell className="text-right font-bold text-lg">
-                                                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(item.total)}
-                                                    </TableCell>
+                                <div className="space-y-4">
+                                    <div className="flex gap-4 items-center flex-wrap">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium">Filtrar Área</label>
+                                            <Select value={areaFilter} onValueChange={setAreaFilter}>
+                                                <SelectTrigger className="w-[150px]">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Todas">Todas</SelectItem>
+                                                    <SelectItem value="Cerdo">Cerdo</SelectItem>
+                                                    <SelectItem value="Res">Res</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium">Filtrar Cargo</label>
+                                            <Select value={roleFilter} onValueChange={setRoleFilter}>
+                                                <SelectTrigger className="w-[150px]">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Todos">Todos</SelectItem>
+                                                    <SelectItem value="Coordinador">Coordinador</SelectItem>
+                                                    <SelectItem value="Despostador">Despostador</SelectItem>
+                                                    <SelectItem value="Polivalente">Polivalente</SelectItem>
+                                                    <SelectItem value="Aprendiz">Aprendiz</SelectItem>
+                                                    <SelectItem value="Recogedor">Recogedor</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="flex-1"></div>
+                                        <div className="pt-4">
+                                            <Button variant="outline" onClick={handleExport}>
+                                                Exportar a Excel
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="border rounded-md overflow-hidden">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Cargo (Base)</TableHead>
+                                                    <TableHead>Nombre</TableHead>
+                                                    <TableHead>Cédula</TableHead>
+                                                    <TableHead className="text-right">Total a Pagar</TableHead>
                                                 </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {filteredData.map((item, idx) => (
+                                                    <TableRow key={idx}>
+                                                        <TableCell className="font-medium text-muted-foreground">
+                                                            {item.employee.cargoBase}
+                                                        </TableCell>
+                                                        <TableCell>{item.employee.nombre}</TableCell>
+                                                        <TableCell>{item.employee.cedula}</TableCell>
+                                                        <TableCell className="text-right font-bold text-lg">
+                                                            {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(item.total)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
                             )}
                         </CardContent>
