@@ -16,8 +16,19 @@ import { es } from 'date-fns/locale'
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { getConsolidatedPayroll } from '@/app/actions'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-// ... existing imports
+type ExtendedWorkDay = WorkDay & {
+    production: ProductionDay[];
+    payments: Payment[];
+}
+
+interface ReportsClientProps {
+    initialDays: ExtendedWorkDay[]
+}
 
 export function ReportsClient({ initialDays }: ReportsClientProps) {
     // Consolidated State
