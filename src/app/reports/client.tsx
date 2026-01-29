@@ -68,6 +68,7 @@ export function ReportsClient({ initialDays }: ReportsClientProps) {
                                     <TableRow>
                                         <TableHead>Fecha</TableHead>
                                         <TableHead className="text-center">Cerdos</TableHead>
+                                        <TableHead className="text-center">Reses</TableHead>
                                         <TableHead className="text-right">Bolsa Desposte</TableHead>
                                         <TableHead className="text-right">Bolsa Recogedor</TableHead>
                                         <TableHead className="text-right">Total Pagado</TableHead>
@@ -75,7 +76,12 @@ export function ReportsClient({ initialDays }: ReportsClientProps) {
                                 </TableHeader>
                                 <TableBody>
                                     {initialDays.map(day => {
-                                        const pigs = day.production.reduce((acc, p) => acc + p.cerdosDespostados, 0)
+                                        const porkProd = day.production.find(p => p.productType === 'Cerdo')
+                                        const beefProd = day.production.find(p => p.productType === 'Res')
+
+                                        const pigs = porkProd ? porkProd.cerdosDespostados : 0
+                                        const cows = beefProd ? beefProd.cerdosDespostados : 0 // Using same field for quantity
+
                                         const poolD = day.production.reduce((acc, p) => acc + (p.cerdosDespostados * p.valorDesposte), 0)
                                         const poolR = day.production.reduce((acc, p) => acc + (p.cerdosDespostados * p.valorRecogedor), 0)
                                         const totalPaid = day.payments.reduce((acc, p) => acc + p.pagoCalculado, 0)
@@ -86,6 +92,7 @@ export function ReportsClient({ initialDays }: ReportsClientProps) {
                                                     {format(new Date(day.fecha), 'PPP', { locale: es })}
                                                 </TableCell>
                                                 <TableCell className="text-center">{pigs}</TableCell>
+                                                <TableCell className="text-center">{cows}</TableCell>
                                                 <TableCell className="text-right">
                                                     {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(poolD)}
                                                 </TableCell>

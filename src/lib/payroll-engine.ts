@@ -110,9 +110,7 @@ export function calculatePayroll(input: CalculationInput): PaymentResult[] {
                 case 'Despostador': segmentUnits += 1.0; break;
                 case 'Polivalente': segmentUnits += 0.5; break;
                 case 'Aprendiz': segmentUnits += 0.25; break;
-                case 'Coordinador':
-                    if (includeCoordinator) segmentUnits += 1.0;
-                    break;
+                case 'Coordinador': break; // Excluded from divisor (Bonus mode)
             }
         });
 
