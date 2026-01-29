@@ -154,26 +154,51 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
 
     const handleProductTypeChange = (type: string) => {
         const isBeef = type === 'Res'
-        const existing = workDay?.production.find(p => p.productType === type)
+        const existingProd = workDay?.production.find(p => p.productType === type)
 
-        if (existing) {
+        // 1. Update Production Form State
+        if (existingProd) {
             setProdForm(prev => ({
                 ...prev,
                 productType: type,
-                pigs: existing.cerdosDespostados,
-                deboneVal: existing.valorDesposte,
-                pickerVal: existing.valorRecogedor,
-                includeCoord: existing.incluirCoordinador
+                pigs: existingProd.cerdosDespostados,
+                deboneVal: existingProd.valorDesposte,
+                pickerVal: existingProd.valorRecogedor,
+                includeCoord: existingProd.incluirCoordinador
             }))
         } else {
             setProdForm(prev => ({
                 ...prev,
                 productType: type,
                 deboneVal: isBeef ? 11000 : 2000,
-                pickerVal: isBeef ? 1000 : 180, // Assumption for Beef picker
-                pigs: 0 // Reset qty
+                pickerVal: isBeef ? 1000 : 180,
+                pigs: 0
             }))
         }
+
+        // 2. Refresh Attendance State for the new Product Type
+        // If we don't do this, the previous selections persist and corrupt the new save.
+        const newAttendance: Record<string, { present: boolean; role: string; participated?: number }> = {}
+
+        activeEmployees.forEach(emp => {
+            // Check if there is an existing assignment strictly for this product type
+            // Note: workDay.assignments contains ALL assignments for the day (both types)
+            const existingAssignment = workDay?.assignments.find(a =>
+                a.employeeId === emp.id && a.productType === type
+            )
+
+            if (existingAssignment) {
+                newAttendance[emp.id] = {
+                    present: true,
+                    role: existingAssignment.cargoDia,
+                    participated: existingAssignment.cerdosParticipados ? existingAssignment.cerdosParticipados : undefined
+                }
+            } else {
+                newAttendance[emp.id] = { present: false, role: emp.cargoBase }
+            }
+        })
+
+        setAttendance(newAttendance)
     }
 
     const handleSaveAndCalculate = async () => {
