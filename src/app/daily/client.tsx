@@ -251,8 +251,24 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
         return { ...emp, ...state }
     })
 
-    // Calculations summary (if available) -> workDay.payments
-    const totalPaid = workDay?.payments.reduce((acc, p) => acc + p.pagoCalculado, 0) || 0
+    // Results Tab State
+    const [resultsTab, setResultsTab] = useState('Cerdo')
+
+    // Sync results tab with user role or form interaction if desired, 
+    // but user wanted explicit control. Let's default to current form type or user area.
+    useEffect(() => {
+        if (currentUser?.area && currentUser.area !== 'Ambos') {
+            setResultsTab(currentUser.area)
+        } else {
+            // If Admin/Ambos, default to whatever they are working on or just keep separate?
+            // Let's sync with prodForm for convenience, but allow manual override?
+            // User asked for option to filter.
+        }
+    }, [currentUser])
+
+    // Filter payments for results view
+    const filteredPayments = workDay?.payments.filter(p => p.productType === resultsTab) || []
+    const totalPaid = filteredPayments.reduce((acc, p) => acc + p.pagoCalculado, 0) || 0
 
     return (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -412,8 +428,16 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
                 <Card className="h-full">
                     <CardHeader>
                         <CardTitle>Resultados del Día</CardTitle>
-                        <CardDescription>
-                            Total Pagado: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(totalPaid)}
+                        <div className="pt-2">
+                            <Tabs value={resultsTab} onValueChange={setResultsTab}>
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="Cerdo" disabled={currentUser?.role === 'COORDINADOR' && currentUser?.area === 'Res'}>Cerdo</TabsTrigger>
+                                    <TabsTrigger value="Res" disabled={currentUser?.role === 'COORDINADOR' && currentUser?.area === 'Cerdo'}>Res</TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        </div>
+                        <CardDescription className="pt-4">
+                            Total Pagado ({resultsTab}): <span className="font-bold text-foreground">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(totalPaid)}</span>
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -424,40 +448,35 @@ export function DailyOperationsClient({ activeEmployees, currentUser }: DailyOpe
                         ) : (
                             <div className="space-y-4">
                                 <div className="border rounded-md overflow-hidden">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Nombre</TableHead>
-                                                <TableHead className="text-right">Pago</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {/* Join with activeEmployees to get names since payment only has ID? 
-                                            Actually, Prisma include could trigger fetching.
-                                            But my ExtendedWorkDay didn't include Employee relation in payments.
-                                            I should fix getWorkDayByDate to include relations or map manually.
-                                            Mapping manually from activeEmployees is safer/faster for now.
-                                        */}
-                                            {workDay.payments.map(p => {
-                                                const emp = activeEmployees.find(e => e.id === p.employeeId)
-                                                return (
-                                                    <TableRow key={p.id}>
-                                                        <TableCell>
-                                                            <div className="font-medium">{emp?.nombre || 'Desconocido'}</div>
-                                                            <div className="text-xs text-muted-foreground">{p.cargoDia}</div>
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-bold">
-                                                            {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(p.pagoCalculado)}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                    {filteredPayments.length === 0 ? (
+                                        <div className="p-4 text-center text-sm text-muted-foreground">No hay pagos registrados para {resultsTab} hoy.</div>
+                                    ) : (
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Nombre</TableHead>
+                                                    <TableHead className="text-right">Pago</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {filteredPayments.map(p => {
+                                                    const emp = activeEmployees.find(e => e.id === p.employeeId)
+                                                    return (
+                                                        <TableRow key={p.id}>
+                                                            <TableCell>
+                                                                <div className="font-medium">{emp?.nombre || 'Desconocido'}</div>
+                                                                <div className="text-xs text-muted-foreground">{p.cargoDia}</div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-bold">
+                                                                {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(p.pagoCalculado)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    )}
                                 </div>
-
-                                {/* Detailed Stats could go here (Pool size, Units, etc) */}
-                                {/* Parse one detail to show the Base Rate? */}
                             </div>
                         )}
                     </CardContent>
