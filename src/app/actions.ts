@@ -272,6 +272,12 @@ export async function calculatePaymentsAction(workDayId: string) {
             continue
         }
 
+        // Create a map of original roles to restore them after calculation
+        const originalRoles = new Map<string, string>();
+        assignments.forEach(a => {
+            if (a.cargoDia) originalRoles.set(a.employeeId, a.cargoDia);
+        });
+
         const payroll = calculatePayroll({
             pigsProcessed: prod.cerdosDespostados,
             deboneValuePerPig: prod.valorDesposte,
@@ -282,16 +288,24 @@ export async function calculatePaymentsAction(workDayId: string) {
                 let engineRole: Role = 'Despostador'; // Default fallback
 
                 const r = a.cargoDia || '';
-                if (r.includes('Coordinador')) engineRole = 'Coordinador';
-                else if (r.includes('Aprendiz')) engineRole = 'Aprendiz'; // Despostador Aprendiz -> Aprendiz
-                else if (r.includes('Recogedor')) engineRole = 'Recogedor'; // Recogedor Experto/General/Aprendiz -> Recogedor (Wait, Recogedor Aprendiz should be Recogedor or Aprendiz? Usually Recogedor uses pickerVal, so Recogedor role is key)
-                else if (r.includes('Despostador')) engineRole = 'Despostador'; // Despostador Experto/General -> Despostador
-                else if (r.includes('Polivalente')) engineRole = 'Polivalente';
 
-                // Specific fix for "Recogedor Aprendiz" if they should be paid as Recogedor but maybe different share?
-                // Engine handles: Recogedor -> share 1.0 (relative to picker pool). 
-                // If "Recogedor Aprendiz" needs lower share in picker pool, engine change needed.
-                // But for now, assuming all Recogedores share equally from Picker Pool.
+                if (r.includes('Coordinador')) {
+                    engineRole = 'Coordinador';
+                } else if (r.includes('Recogedor')) {
+                    engineRole = 'Recogedor';
+                    // Note: Engine currently pays all Recogedores 1.0. 
+                    // If tiers are needed for Pickers, engine update is required using poolType logic.
+                } else if (r.includes('Despostador Aprendiz')) {
+                    engineRole = 'Aprendiz'; // 0.25
+                } else if (r.includes('Despostador General')) {
+                    engineRole = 'Polivalente'; // 0.5 as requested by user ("gana lo mismo que el polivalente")
+                } else if (r.includes('Despostador Experto') || r.includes('Despostador')) {
+                    engineRole = 'Despostador'; // 1.0
+                } else if (r.includes('Polivalente')) {
+                    engineRole = 'Polivalente'; // 0.5
+                } else if (r.includes('Aprendiz')) {
+                    engineRole = 'Aprendiz'; // 0.25
+                }
 
                 return {
                     employeeId: a.employeeId,
@@ -310,7 +324,7 @@ export async function calculatePaymentsAction(workDayId: string) {
             data: payroll.map(r => ({
                 workDayId,
                 employeeId: r.employeeId,
-                cargoDia: r.role,
+                cargoDia: originalRoles.get(r.employeeId) || r.role, // Use original role name for display, fallback to engine role
                 productType: prod.productType,
                 pagoCalculado: r.amount,
                 detalle: JSON.stringify(r.details)
