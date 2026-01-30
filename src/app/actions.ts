@@ -277,11 +277,28 @@ export async function calculatePaymentsAction(workDayId: string) {
             deboneValuePerPig: prod.valorDesposte,
             pickerValuePerPig: prod.valorRecogedor,
             includeCoordinator: prod.incluirCoordinador,
-            assignments: assignments.map(a => ({
-                employeeId: a.employeeId,
-                role: a.cargoDia as Role,
-                pigsParticipated: a.cerdosParticipados
-            }))
+            assignments: assignments.map(a => {
+                // Map UI Role (Despostador Experto/General/Aprendiz) to Engine Role (Despostador/Aprendiz)
+                let engineRole: Role = 'Despostador'; // Default fallback
+
+                const r = a.cargoDia || '';
+                if (r.includes('Coordinador')) engineRole = 'Coordinador';
+                else if (r.includes('Aprendiz')) engineRole = 'Aprendiz'; // Despostador Aprendiz -> Aprendiz
+                else if (r.includes('Recogedor')) engineRole = 'Recogedor'; // Recogedor Experto/General/Aprendiz -> Recogedor (Wait, Recogedor Aprendiz should be Recogedor or Aprendiz? Usually Recogedor uses pickerVal, so Recogedor role is key)
+                else if (r.includes('Despostador')) engineRole = 'Despostador'; // Despostador Experto/General -> Despostador
+                else if (r.includes('Polivalente')) engineRole = 'Polivalente';
+
+                // Specific fix for "Recogedor Aprendiz" if they should be paid as Recogedor but maybe different share?
+                // Engine handles: Recogedor -> share 1.0 (relative to picker pool). 
+                // If "Recogedor Aprendiz" needs lower share in picker pool, engine change needed.
+                // But for now, assuming all Recogedores share equally from Picker Pool.
+
+                return {
+                    employeeId: a.employeeId,
+                    role: engineRole,
+                    pigsParticipated: a.cerdosParticipados
+                }
+            })
         })
 
         // Save payments for this productType
